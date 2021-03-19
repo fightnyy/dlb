@@ -121,5 +121,5 @@ class BartForSeq2SeqLM(pl.LightningModule):
 
 if __name__ == "__main__":
     model = BartForSeq2SeqLM()
-    trainer = pl.Trainer(gpus=-1, auto_select_gpus=True)
+    trainer = pl.Trainer(gpus=-1, auto_select_gpus=True, accelerator="ddp")
     trainer.fit(model)

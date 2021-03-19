@@ -40,7 +40,6 @@ class PAWS_X(torch.utils.data.Dataset):
         batch: dict = self.tokenizer.prepare_seq2seq_batch(
             src_lang=self.src_lang,
             tgt_lang=self.tgt_lang,
-            padding="max_length",
             src_texts=self.data.iloc[idx]["sentence1"],
             tgt_texts=self.data.iloc[idx]["sentence2"],
             return_tensors="pt",
