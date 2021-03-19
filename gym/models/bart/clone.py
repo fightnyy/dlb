@@ -16,11 +16,9 @@
 # limitations under the License.
 
 import sys
-
 sys.path.append("../../../")
 import pytorch_lightning as pl
-from transformers import MBartForConditionalGeneration, MBartTokenizer
-from gym.lightning_base import LightningBase
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 from typing import Dict, Tuple, List
 from paws_data import PAWS_X
 from torch.utils.data import DataLoader
@@ -32,50 +30,35 @@ import torch.nn.functional as F
 
 
 class BartForSeq2SeqLM(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, src_lang, tgt_lang):
         super().__init__()
         self.batch_size = 16
         self.lr = 3e-5
-        self.tokenizer = MBartTokenizer.from_pretrained(
-            "facebook/mbart-large-cc25")
-        self.model = MBartForConditionalGeneration.from_pretrained(
-            "facebook/mbart-large-cc25")
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        self.tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-en-ro",src_lang=self.src_lang,tgt_lang=self.tgt_lang)
+        self.model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
+
 
     def forward(self, batch):
-        input_ids, decoder_input_ids, input_attn, decoder_attention_mask = batch
-        out = self.model(input_ids=input_ids,
-                         decoder_input_ids=decoder_input_ids,
-                         attention_mask=input_attn,
-                         decoder_attention_mask=decoder_attention_mask)
+        model_inputs, labels = batch
+        out = self.model(**model_inputs, labels = labels)
         return out
-
-    def _evaluate(self, batch, batch_idx, stage=None):
-        outputs = self.forward(batch)
-        import pdb
-        pdb.set_trace()
-        logits = outputs['logits']
-        logits = F.softmax(logits, dim=-1)
-        loss = F.cross_entropy(logits, decoder_input_ids)
-        if stage:
-            self.log(f'{stage}_loss', loss, prog_bar=True)
-        return loss
 
     def training_step(self, batch, batch_idx):
         """Training steps"""
-        output = self.forward(batch)
-        import pdb
-        pdb.set_trace()
-        logits = outputs['logits']
-        logits = F.softmax(logits, dim=-1)
-        loss = F.cross_entropy(logits,
-                               decoder_input_ids,
-                               ignore_index=self.tokenizer.all_special_ids)
+        out = self.forward(batch)
+        loss = out['loss']
+        self.log("train_loss", loss)
         return loss
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx) -> Dict:
         """Validation steps"""
-        return self._evaluate(batch, batch_idx, stage="valid")
+        out = self.forward(batch)
+        loss = out['loss']
+        self.log("val_loss", loss)
+        return loss
 
     def test_step(self, batch, batch_idx):
         while True:
@@ -84,7 +67,9 @@ class BartForSeq2SeqLM(pl.LightningModule):
             if user_input == "stop":
                 break
             else:
-                break
+                inputs = self.tokenizer(user_input, return_tensors="pt")
+                translated_tokens = model.generate(**inputs, decoder_start_token_id=self.tokenizer.lang_code_to_id[self.tgt_lang])
+                print(self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
 
     def configure_optimizers(self) -> Tuple[List[Optimizer], List[LambdaLR]]:
         """
@@ -120,6 +105,6 @@ class BartForSeq2SeqLM(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    model = BartForSeq2SeqLM()
-    trainer = pl.Trainer(gpus=-1, auto_select_gpus=True)
+    model = BartForSeq2SeqLM("ko_KR","ko_KR")
+    trainer = pl.Trainer()
     trainer.fit(model)
