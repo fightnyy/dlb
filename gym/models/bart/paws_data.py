@@ -34,6 +34,8 @@ class PAWS_X(torch.utils.data.Dataset):
         model_inputs = self.tokenizer(self.data.iloc[idx]['sentence1'], return_tensors="pt")
         with self.tokenizer.as_target_tokenizer():
             labels = self.tokenizer(self.data.iloc[idx]['sentence2'], return_tensors="pt").input_ids
+        
+        model_input, labels= self.make_pad(model_inputs, labels)
 
         return model_inputs, labels
 
@@ -46,7 +48,7 @@ class PAWS_X(torch.utils.data.Dataset):
 
             
 
-    def make_output_attention(self, tgt_texts):
+    def make_pad(self, tgt_texts):
 
         one = torch.ones(self.tokenizer.model_max_length)
         zero = torch.zeros(self.tokenizer.model_max_length)
