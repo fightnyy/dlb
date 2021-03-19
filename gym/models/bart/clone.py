@@ -36,13 +36,13 @@ class BartForSeq2SeqLM(pl.LightningModule):
         self.lr = 3e-5
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        self.tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-en-ro",src_lang=self.src_lang,tgt_lang=self.tgt_lang)
         self.model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
 
 
     def forward(self, batch):
         model_inputs, labels = batch
         out = self.model(**model_inputs, labels = labels)
+        import pdb;pdb.set_trace()
         return out
 
     def training_step(self, batch, batch_idx):
@@ -87,7 +87,7 @@ class BartForSeq2SeqLM(pl.LightningModule):
     def train_dataloader(self):
         return DataLoader(
             PAWS_X("../../models/data/x-final/ko/translated_train.tsv",
-                   "ko_KR", "ko_KR"),
+                   "ko_KR", "ko_KR",128),
             batch_size=32,
             num_workers=32,
             pin_memory=True,
@@ -97,7 +97,7 @@ class BartForSeq2SeqLM(pl.LightningModule):
     def val_dataloader(self):
         return DataLoader(
             PAWS_X("../../models/data/x-final/ko/dev_2k.tsv", "ko_KR",
-                   "ko_KR"),
+                   "ko_KR",128),
             batch_size=32,
             pin_memory=True,
             num_workers=32,

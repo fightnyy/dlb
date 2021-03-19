@@ -52,9 +52,9 @@ class PAWS_X(torch.utils.data.Dataset):
 
         # new_model_inputs = defaultdict(list)
         # new_label = []
-        model_inputs['input_ids']=torch.tensor([input_ids]).long()
-        model_inputs['attention_mask']=torch.tensor([attn]).long()
-        label=torch.tensor([label]).long()
+        model_inputs['input_ids']=torch.tensor(input_ids).long()
+        model_inputs['attention_mask']=torch.tensor(attn).long()
+        label=torch.tensor(label).long()
 
         return model_inputs, label
 
