@@ -4,7 +4,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from transformers import MBart50TokenizerFast
-
+from typing import Dict, List
+from collections import defaultdict
 import torch
 
 import pandas as pd
@@ -17,10 +18,11 @@ class PAWS_X(torch.utils.data.Dataset):
     tgt_lang : language of the output, example : English :en_XX, chinese:zh_CN, japanese:ja_XX, korean : ko_KR,
     """
 
-    def __init__(self, infile: str, src_lang: str, tgt_lang: str):
+    def __init__(self, infile: str, src_lang: str, tgt_lang: str,max_len:int):
         self.tokenizer = MBart50TokenizerFast.from_pretrained(
             "facebook/mbart-large-en-ro", src_lang=src_lang,tgt_lang=tgt_lang)
         self.data = pd.read_csv(infile, sep="\t", error_bad_lines=False)
+        self.max_len = max_len
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
         self.preprocess_data()
@@ -34,10 +36,28 @@ class PAWS_X(torch.utils.data.Dataset):
         model_inputs = self.tokenizer(self.data.iloc[idx]['sentence1'], return_tensors="pt")
         with self.tokenizer.as_target_tokenizer():
             labels = self.tokenizer(self.data.iloc[idx]['sentence2'], return_tensors="pt").input_ids
-        
-        model_input, labels= self.make_pad(model_inputs, labels)
 
-        return model_inputs, labels
+
+        input_ids = model_inputs['input_ids'][0].tolist()
+        pad_len = len(input_ids)
+        pad = [self.tokenizer.pad_token_id] * (self.max_len-pad_len)
+        input_ids.extend(pad)
+
+        attn = model_inputs['attention_mask'][0].tolist()
+        attn_pad = [0] * (self.max_len-pad_len)
+        attn.extend(attn_pad)
+        label = labels[0].tolist()
+        labels_pad = [self.tokenizer.pad_token_id] * (self.max_len-len(label))
+        label.extend(labels_pad)
+
+        # new_model_inputs = defaultdict(list)
+        # new_label = []
+        model_inputs['input_ids']=torch.tensor([input_ids]).long()
+        model_inputs['attention_mask']=torch.tensor([attn]).long()
+        label=torch.tensor([label]).long()
+
+        return model_inputs, label
+
 
     def preprocess_data(self):
         self.data.drop_duplicates(subset=["sentence1", "sentence2"],
@@ -48,11 +68,8 @@ class PAWS_X(torch.utils.data.Dataset):
 
             
 
-    def make_pad(self, tgt_texts):
-
-        one = torch.ones(self.tokenizer.model_max_length)
-        zero = torch.zeros(self.tokenizer.model_max_length)
-        tgt_attention_mask = torch.where(tgt_texts == torch.tensor(1), zero,
-                                         one)
-
-        return tgt_attention_mask 
+    # def make_padding(self, model_inputs:Dict,labels:torch.Tensor):
+    #
+    #     model_inputs['']
+    #
+    #     return tgt_attention_mask
