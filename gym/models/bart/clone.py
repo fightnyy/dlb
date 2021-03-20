@@ -17,6 +17,7 @@
 
 import torch.nn.functional as F
 import torch
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from transformers import get_cosine_schedule_with_warmup
 from torch.optim.lr_scheduler import LambdaLR
 from torch.optim import Optimizer, AdamW
@@ -91,8 +92,8 @@ class BartForSeq2SeqLM(pl.LightningModule):
     def train_dataloader(self):
         return DataLoader(
             PAWS_X("../../models/data/x-final/ko/translated_train.tsv",
-                   "ko_KR", "ko_KR", 1024),
-            batch_size=2,
+                   "ko_KR", "ko_KR", 128),
+            batch_size=8,
             pin_memory=True,
             num_workers=16,
             shuffle=True,
@@ -101,15 +102,19 @@ class BartForSeq2SeqLM(pl.LightningModule):
     def val_dataloader(self):
         return DataLoader(
             PAWS_X("../../models/data/x-final/ko/dev_2k.tsv", "ko_KR", "ko_KR",
-                   1024),
+                   128),
             num_workers=16,
-            batch_size=2,
+            batch_size=8,
             pin_memory=True,
         )
 
 
 if __name__ == "__main__":
     #trainer = pl.Trainer(gpus=None)
-    trainer = pl.Trainer(gpus=-1, auto_select_gpus=True, accelerator="ddp")
+    trainer = pl.Trainer(fast_dev_run=True,
+                         gpus=-1,
+                         callbacks=[EarlyStopping(monitor="val_loss")],
+                         auto_select_gpus=True,
+                         accelerator="ddp")
     model = BartForSeq2SeqLM("ko_KR", "ko_KR")
     trainer.fit(model)
