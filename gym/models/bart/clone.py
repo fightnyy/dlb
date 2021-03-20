@@ -104,6 +104,7 @@ class BartForSeq2SeqLM(pl.LightningModule):
                    1024),
             num_workers=16,
             batch_size=2,
+            pin_memory=True,
         )
 
 
