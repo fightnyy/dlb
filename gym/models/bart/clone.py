@@ -15,18 +15,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch.nn.functional as F
+import torch
+from transformers import get_cosine_schedule_with_warmup
+from torch.optim.lr_scheduler import LambdaLR
+from torch.optim import Optimizer, AdamW
+from torch.utils.data import DataLoader
+from paws_data import PAWS_X
+from typing import Dict, Tuple, List
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+import pytorch_lightning as pl
 import sys
 sys.path.append("../../../")
-import pytorch_lightning as pl
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
-from typing import Dict, Tuple, List
-from paws_data import PAWS_X
-from torch.utils.data import DataLoader
-from torch.optim import Optimizer, AdamW
-from torch.optim.lr_scheduler import LambdaLR
-from transformers import get_cosine_schedule_with_warmup
-import torch
-import torch.nn.functional as F
 
 
 class BartForSeq2SeqLM(pl.LightningModule):
@@ -36,13 +36,12 @@ class BartForSeq2SeqLM(pl.LightningModule):
         self.lr = 3e-5
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        self.model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
-
+        self.model = MBartForConditionalGeneration.from_pretrained(
+            "facebook/mbart-large-en-ro")
 
     def forward(self, batch):
         model_inputs, labels = batch
-        out = self.model(**model_inputs, labels = labels)
-        import pdb;pdb.set_trace()
+        out = self.model(**model_inputs, labels=labels)
         return out
 
     def training_step(self, batch, batch_idx):
@@ -68,8 +67,13 @@ class BartForSeq2SeqLM(pl.LightningModule):
                 break
             else:
                 inputs = self.tokenizer(user_input, return_tensors="pt")
-                translated_tokens = model.generate(**inputs, decoder_start_token_id=self.tokenizer.lang_code_to_id[self.tgt_lang])
-                print(self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
+                translated_tokens = model.generate(
+                    **inputs,
+                    decoder_start_token_id=self.tokenizer.lang_code_to_id[
+                        self.tgt_lang])
+                print(
+                    self.tokenizer.batch_decode(translated_tokens,
+                                                skip_special_tokens=True)[0])
 
     def configure_optimizers(self) -> Tuple[List[Optimizer], List[LambdaLR]]:
         """
@@ -87,24 +91,24 @@ class BartForSeq2SeqLM(pl.LightningModule):
     def train_dataloader(self):
         return DataLoader(
             PAWS_X("../../models/data/x-final/ko/translated_train.tsv",
-                   "ko_KR", "ko_KR",128),
-            batch_size=32,
-            num_workers=32,
+                   "ko_KR", "ko_KR", 1024),
+            batch_size=2,
             pin_memory=True,
+            num_workers=16,
             shuffle=True,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            PAWS_X("../../models/data/x-final/ko/dev_2k.tsv", "ko_KR",
-                   "ko_KR",128),
-            batch_size=32,
-            pin_memory=True,
-            num_workers=32,
+            PAWS_X("../../models/data/x-final/ko/dev_2k.tsv", "ko_KR", "ko_KR",
+                   1024),
+            num_workers=16,
+            batch_size=2,
         )
 
 
 if __name__ == "__main__":
+    #trainer = pl.Trainer(gpus=None)
     trainer = pl.Trainer(gpus=-1, auto_select_gpus=True, accelerator="ddp")
-    model = BartForSeq2SeqLM("ko_KR","ko_KR")
+    model = BartForSeq2SeqLM("ko_KR", "ko_KR")
     trainer.fit(model)
