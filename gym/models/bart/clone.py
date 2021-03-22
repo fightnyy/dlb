@@ -22,12 +22,11 @@ from transformers import get_cosine_schedule_with_warmup
 from torch.optim.lr_scheduler import LambdaLR
 from torch.optim import Optimizer, AdamW
 from torch.utils.data import DataLoader
-from paws_data import PAWS_X
 from typing import Dict, Tuple, List
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 import pytorch_lightning as pl
 import sys
-sys.path.append("../../../")
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 
 class BartForSeq2SeqLM(pl.LightningModule):
@@ -38,7 +37,8 @@ class BartForSeq2SeqLM(pl.LightningModule):
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
         self.model = MBartForConditionalGeneration.from_pretrained(
-            "facebook/mbart-large-en-ro")
+            "facebook/mbart-large-en-ro"
+        )
 
     def forward(self, batch):
         model_inputs, labels = batch
@@ -48,7 +48,7 @@ class BartForSeq2SeqLM(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """Training steps"""
         out = self.forward(batch)
-        loss = out['loss']
+        loss = out["loss"]
         self.log("train_loss", loss)
         return loss
 
@@ -56,8 +56,8 @@ class BartForSeq2SeqLM(pl.LightningModule):
     def validation_step(self, batch, batch_idx) -> Dict:
         """Validation steps"""
         out = self.forward(batch)
-        loss = out['loss']
-        self.log("val_loss", loss)
+        loss = out["loss"]
+        self.log('val_loss', loss, on_step=True, prog_bar=True, logger=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -70,11 +70,13 @@ class BartForSeq2SeqLM(pl.LightningModule):
                 inputs = self.tokenizer(user_input, return_tensors="pt")
                 translated_tokens = model.generate(
                     **inputs,
-                    decoder_start_token_id=self.tokenizer.lang_code_to_id[
-                        self.tgt_lang])
+                    decoder_start_token_id=self.tokenizer.lang_code_to_id[self.tgt_lang]
+                )
                 print(
-                    self.tokenizer.batch_decode(translated_tokens,
-                                                skip_special_tokens=True)[0])
+                    self.tokenizer.batch_decode(
+                        translated_tokens, skip_special_tokens=True
+                    )[0]
+                )
 
     def configure_optimizers(self) -> Tuple[List[Optimizer], List[LambdaLR]]:
         """
@@ -84,37 +86,41 @@ class BartForSeq2SeqLM(pl.LightningModule):
             (Tuple[List[Optimizer], List[LambdaLR]]): [optimizers], [schedulers]
         """
 
-        optimizer = AdamW([p for p in self.parameters() if p.requires_grad],
-                          lr=self.lr)
+        optimizer = AdamW([p for p in self.parameters() if p.requires_grad], lr=self.lr)
 
         return {"optimizer": optimizer}
 
     def train_dataloader(self):
         return DataLoader(
-            PAWS_X("../../models/data/x-final/ko/translated_train.tsv",
-                   "ko_KR", "ko_KR", 128),
-            batch_size=8,
+            PAWS_X("x-final/ko/translated_train.tsv", "ko_KR", "ko_KR", 128),
+            batch_size=4,
             pin_memory=True,
-            num_workers=16,
+            num_workers=4,
             shuffle=True,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            PAWS_X("../../models/data/x-final/ko/dev_2k.tsv", "ko_KR", "ko_KR",
-                   128),
-            num_workers=16,
-            batch_size=8,
+            PAWS_X("x-final/ko/dev_2k.tsv", "ko_KR", "ko_KR", 128),
+            num_workers=4,
+            batch_size=4,
             pin_memory=True,
         )
 
 
 if __name__ == "__main__":
-    #trainer = pl.Trainer(gpus=None)
-    trainer = pl.Trainer(fast_dev_run=True,
-                         gpus=-1,
-                         callbacks=[EarlyStopping(monitor="val_loss")],
-                         auto_select_gpus=True,
-                         accelerator="ddp")
+    # trainer = pl.Trainer(gpus=None)
+    trainer = pl.Trainer(
+        gpus=1,
+        callbacks=[
+            EarlyStopping(monitor="val_loss"),
+            ModelCheckpoint(
+                monitor="val_loss",
+                filename="paraphrase_mbart_{epoch:02d}-{val_loss:.2f}",
+                save_top_k=1,
+                mode="min",
+            ),
+        ]
+    )
     model = BartForSeq2SeqLM("ko_KR", "ko_KR")
     trainer.fit(model)
